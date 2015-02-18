@@ -11,96 +11,94 @@
  *  $dumper->run("mydb3");
  */
 
+
 class MongoDumper {
-	private $_BACKUP_FOLDER = "";
-	private $_CURRENT_DATE_TIME = ""; 
-	private $current_dump_path = "";
-	private $database = "";
-	private $files_to_delete = array();
-	private $debug = false;
 
-	public function __construct($backup_folder) {
-		$now = new DateTime;
-		$this->_BACKUP_FOLDER = rtrim($backup_folder, '/');
-		$this->_CURRENT_DATE_TIME = $now->format('d-m-Y_H-i');
-	}
+    private $_BACKUP_FOLDER = "";
+    private $_CURRENT_DATE_TIME = "";
+    private $current_dump_path = "";
+    private $database = "";
+    private $files_to_delete = array();
+    private $debug = false;
 
-	public function run($database, $debug = false) {
-		$this->debug = ($debug === true);
-		try {
-			$this->current_dump_path = $this->_BACKUP_FOLDER . "/" . $database . "_" . $this->_CURRENT_DATE_TIME;
-			$this->database = $database;
+    public function __construct($backup_folder) {
+        $now = new DateTime;
+        $this->_BACKUP_FOLDER = rtrim($backup_folder, '/');
+        $this->_CURRENT_DATE_TIME = $now->format('d-m-Y_H-i');
+    }
 
-			$this->echo_if_debug("<p><strong>Backing up '" . $database . "' to '" . $this->current_dump_path . "'</strong></p>");
+    public function run($database, $debug = false) {
+        $this->debug = ($debug === true);
+        try {
+            $this->current_dump_path = $this->_BACKUP_FOLDER . "/" . $database . "_" . $this->_CURRENT_DATE_TIME;
+            $this->database = $database;
 
-			$this->echo_if_debug("<ol>");
-			$this->echo_if_debug("<li>Executing mongodump...</li>");
-			$this->mongodump();
+            $this->echo_if_debug("Backing up '" . $database . "' to '" . $this->current_dump_path . "'\n");
 
-			$this->echo_if_debug("<li>Zipping files...</li>");
-			$this->zip_files();
+            $this->echo_if_debug("Executing mongodump...\n");
+            $this->mongodump();
 
-			$this->echo_if_debug("<li>Deleting dump folder...</li>");
-			$this->delete_dump_folder();
+            $this->echo_if_debug("Zipping files...\n");
+            $this->zip_files();
 
-			$this->echo_if_debug("<li>Complete!</li>");
-			$this->echo_if_debug("</ol>");
-			return;
-		}
-		catch (Exception $ex) {
-			return false;
-		}
-	}
+            $this->echo_if_debug("Deleting dump folder...\n");
+            $this->delete_dump_folder();
 
-	private function echo_if_debug($string) {
-		if ($this->debug) {
-			echo $string;
-		}
-	}
+            $this->echo_if_debug("Complete!\n");
+            return true;
+        } catch (Exception $ex) {
+            return false;
+        }
+    }
 
-	private function mongodump() {
-		$command = "mongodump --db " . $this->database . " --out " . $this->current_dump_path;
-	    $results = shell_exec($command);
-	    $this->echo_if_debug("<ul><li>" . $command . "</li><li>".$results."</li></ul>");
-	}
+    private function echo_if_debug($string) {
+        if ($this->debug) {
+            echo $string;
+        }
+    }
 
-	private function zip_files() {
-		$database_dump_folder = $this->current_dump_path . "/" . $this->database; 
+    private function mongodump() {
+        $command = "mongodump --db " . $this->database . " --out " . $this->current_dump_path;
+        $results = shell_exec($command);
+        $this->echo_if_debug($command . "\n" . $results);
+    }
 
-		// Initialize archive object
-		$zip = new ZipArchive;
-		$zip->open($this->current_dump_path . '.zip', ZipArchive::CREATE);
+    private function zip_files() {
+        $database_dump_folder = $this->current_dump_path . "/" . $this->database;
 
-		// Create recursive directory iterator
-		$files = new RecursiveIteratorIterator(
-		    new RecursiveDirectoryIterator($database_dump_folder),
-		    RecursiveIteratorIterator::LEAVES_ONLY
-		);
+        // Initialize archive object
+        $zip = new ZipArchive;
+        $zip->open($this->current_dump_path . '.zip', ZipArchive::CREATE);
 
-		foreach ($files as $name => $file) {
-		    // Get real path for current file
-		    $filePath = $file->getRealPath();
+        // Create recursive directory iterator
+        $files = new RecursiveIteratorIterator(
+                new RecursiveDirectoryIterator($database_dump_folder), RecursiveIteratorIterator::LEAVES_ONLY
+        );
 
-		    // Add current file to archive
-		    $zip->addFile($filePath);
+        foreach ($files as $name => $file) {
+            // Get real path for current file
+            $filePath = $file->getRealPath();
 
-		    // add file to delete queue
-		    $this->files_to_delete[] = $filePath;
-		}
+            // Add current file to archive
+            $zip->addFile($filePath, basename($filePath));
 
-		$zip->close();
-	}
+            // add file to delete queue
+            $this->files_to_delete[] = $filePath;
+        }
 
-	private function delete_dump_folder() {
-		$files = new RecursiveIteratorIterator(
-			new RecursiveDirectoryIterator($this->current_dump_path, FilesystemIterator::SKIP_DOTS), 
-			RecursiveIteratorIterator::CHILD_FIRST
-		);
+        $zip->close();
+    }
 
-		foreach ( $files as $file ) {
-		    $file->isDir() ? rmdir($file) : unlink($file);
-		}
+    private function delete_dump_folder() {
+        $files = new RecursiveIteratorIterator(
+                new RecursiveDirectoryIterator($this->current_dump_path, FilesystemIterator::SKIP_DOTS), RecursiveIteratorIterator::CHILD_FIRST
+        );
 
-		rmdir($this->current_dump_path);
-	}
+        foreach ($files as $file) {
+            $file->isDir() ? rmdir($file) : unlink($file);
+        }
+
+        rmdir($this->current_dump_path);
+    }
+
 }
